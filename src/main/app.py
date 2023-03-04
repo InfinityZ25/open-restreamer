@@ -1,10 +1,9 @@
 from typing import List
 
 import ffmpeg
-
-from pymongo import MongoClient
 from dotenv import dotenv_values
 from flask import Flask, jsonify, request
+from pymongo import MongoClient
 
 config = dotenv_values(".env")
 app = Flask(__name__)
@@ -25,17 +24,23 @@ def auth():
         return jsonify({'message': 'auth token not provided'}), 400
 
     user = db['auth'].find_one({'auth_token': auth_token})
+    print(user)
     if not user:
         return jsonify({'message': 'invalid auth token'}), 401
 
-    return jsonify({'message': 'auth token valid'})
+    user_info = {
+        'username': user['user'],
+        'email': 'none@just.pics',
+        'auth_token': user['auth_token']
+    }
+
+    return jsonify({'message': 'auth token valid', 'user_info': user_info})
 
 
 @app.route('/status/<stream_id>', methods=['GET'])
 def get_stream_status(stream_id):
     """ Returns the status of the stream with the given stream id."""
     global stream_processes
-    
 
     if stream_id not in stream_processes:
         return jsonify({'message': 'stream not found'}), 404
