@@ -16,6 +16,21 @@ mongo = MongoClient(config['ATLAS_URI'])
 db = mongo[config['DB_NAME']]
 
 
+# An endpoint that checks a collection in the database to see if the auth token provided is valid.
+@app.route('/auth', methods=['POST'])
+def auth():
+    """ Checks if the given auth token is valid. """
+    auth_token = request.get_json().get('auth_token', None)
+    if not auth_token:
+        return jsonify({'message': 'auth token not provided'}), 400
+
+    user = db['auth'].find_one({'auth_token': auth_token})
+    if not user:
+        return jsonify({'message': 'invalid auth token'}), 401
+
+    return jsonify({'message': 'auth token valid'})
+
+
 @app.route('/status/<stream_id>', methods=['GET'])
 def get_stream_status(stream_id):
     """ Returns the status of the stream with the given stream id."""
