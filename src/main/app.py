@@ -1,32 +1,77 @@
-# create a Flask app that exposes a GET endpoint to check the status of the ap
-
-import subprocess
-
-from index import get_index_html
-
-# Set up the RTMP server using Flask
-from flask import Flask, request
+import ffmpeg
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+stream_processes = {}
 
 
-@app.route("/", methods=["GET"])
-def index():
-    return get_index_html()
+@app.route('/status/<stream_id>', methods=['GET'])
+def get_stream_status(stream_id):
+    global stream_processes
+
+    if stream_id not in stream_processes:
+        return jsonify({'message': 'stream not found'}), 404
+
+    twitch_process, youtube_process = stream_processes[stream_id]
+
+    twitch_status = 'running' if twitch_process and not twitch_process.poll() else 'stopped'
+    youtube_status = 'running' if youtube_process and not youtube_process.poll() else 'stopped'
+
+    return jsonify({
+        'twitch': twitch_status,
+        'youtube': youtube_status
+    })
 
 
-@app.route('/stream', methods=['POST'])
-def stream():
-    # Use FFMPEG to encode and stream the incoming RTMP stream to YouTube and Twitch
-    youtube_stream_url = 'rtmp://youtube_stream_url'
-    twitch_stream_url = 'rtmp://twitch_stream_url'
+@app.route('/start/<stream_id>', methods=['POST'])
+def start_stream(stream_id):
+    global stream_processes
 
-    ffmpeg_cmd = f"ffmpeg -i {request.stream} -c:v libx264 -preset fast -b:v 3000k -maxrate 3000k -bufsize 6000k -c:a aac -b:a 128k -f flv {youtube_stream_url} -f flv {twitch_stream_url}"
+    if stream_id in stream_processes and not any(poll is not None and poll.poll() is None for poll in stream_processes[stream_id]):
+        return jsonify({'message': 'stream already running'}), 400
 
-    # Start the FFMPEG subprocess
-    subprocess.Popen(ffmpeg_cmd.split())
+    stream_data = request.get_json()
+    keys = stream_data.get('keys', {})
+    twitch_key = keys.get('twitch')
+    youtube_key = keys.get('youtube')
 
-    return 'Streaming started successfully!'
+    twitch_metadata = stream_data.get('stream_metadata', {}).get('twitch', {})
+    youtube_metadata = stream_data.get('stream_metadata', {}).get('youtube', {})
+
+    twitch_rtmp_url = f'rtmp://live.twitch.tv/app/{twitch_key}' if twitch_key else None
+    youtube_rtmp_url = f'rtmp://a.rtmp.youtube.com/live2/{youtube_key}' if youtube_key else None
+
+    input_stream = ffmpeg.input('rtmp://<your-rtmp-server>/<your-stream-key>')
+
+    outputs = []
+    if twitch_rtmp_url:
+        outputs.append(
+            ffmpeg.output(
+                input_stream,
+                twitch_rtmp_url,
+                c:v='copy',
+                c:a='aac',
+                f='flv',
+                metadata={'title': twitch_metadata.get('title'), 'game': twitch_metadata.get('game')}
+            )
+        )
+
+    if youtube_rtmp_url:
+        outputs.append(
+            ffmpeg.output(
+                input_stream,
+                youtube_rtmp_url,
+                c:v='copy',
+                c:a='aac',
+                f='flv',
+                metadata={'title': youtube_metadata.get('title'), 'category': youtube_metadata.get('category')}
+            )
+        )
+
+    processes = [ffmpeg.run_async(output) for output in outputs]
+    stream_processes[stream_id] = processes
+
+    return jsonify({'message': f'stream {stream_id} started'})
 
 
 if __name__ == '__main__':
