@@ -5,6 +5,7 @@ Add work log here later.
 
 # 03/04 Logs:
 ~ 14:00 -> 20:00 (6h total) work:
+- [ ] Finish build battle plugin for danevent.
 - [ ] Finish python grpc project and hook up model to rust backend.
 - [ ] Create rust backend takes in REST calls and calls python grpc service to obtain predictions/outputs.
 
